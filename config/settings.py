@@ -53,6 +53,15 @@ class Settings:
         # wait for it to fill before cancelling and sending a market order.
         self.live_limit_buffer_pct: float = float(os.getenv("LIVE_LIMIT_BUFFER_PCT", "2.0"))
         self.live_fill_timeout_seconds: float = float(os.getenv("LIVE_FILL_TIMEOUT_SECONDS", "5"))
+        # Worst price (% of LTP) a live order may fill at. Entries never go
+        # past it (unfilled remainder is dropped — no market order into a
+        # thin option book); exits use it as a second limit step and only
+        # fall back to market after that, since a position must close.
+        self.live_max_slippage_pct: float = float(os.getenv("LIVE_MAX_SLIPPAGE_PCT", "10.0"))
+        # "market" (default): entries and exits go straight out as market
+        # orders. "limit": the slippage-capped limit flow above (entry never
+        # past LIVE_MAX_SLIPPAGE_PCT; exit falls back to market last).
+        self.live_order_type: str = (os.getenv("LIVE_ORDER_TYPE", "market").strip().lower() or "market")
 
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO")
         # Default is OUTSIDE each service's own directory (algo.trade/,

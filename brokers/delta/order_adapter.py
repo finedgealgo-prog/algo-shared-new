@@ -150,6 +150,49 @@ class DeltaOrderAdapter:
         log.info("[DeltaLive] place_order %s", body)
         return self._signed_request("POST", "/v2/orders", body=body).get("result") or {}
 
+    def place_stop_order(
+        self, *, symbol: str, side: str, size: int, stop_price: float,
+        limit_price: float = 0.0, client_order_id: str = "",
+    ) -> dict:
+        """Exchange-resident protective stop-loss: POST /v2/orders with
+        stop_order_type=stop_loss_order, reduce_only, triggered on Delta's
+        mark price (the same price the engine's SL watches). Stop-market by
+        default; stop-limit when `limit_price` is given. It stays on Delta
+        (state "pending") until triggered, so the SL holds even if this
+        server is down. Options need `limit_price` (stop-limit) — Delta
+        answers "unsupported" to a stop-market option order."""
+        product = self.get_product(symbol)
+        body: dict[str, Any] = {
+            "product_id": product["id"], "product_symbol": product.get("symbol", symbol),
+            "side": side, "size": int(size), "reduce_only": True,
+            "stop_order_type": "stop_loss_order", "stop_trigger_method": "mark_price",
+            "stop_price": self.round_to_tick(stop_price, product.get("tick_size"), side),
+            "order_type": "limit_order" if limit_price > 0 else "market_order",
+        }
+        if limit_price > 0:
+            body["limit_price"] = self.round_to_tick(limit_price, product.get("tick_size"), side)
+            body["time_in_force"] = "gtc"
+        if client_order_id:
+            body["client_order_id"] = client_order_id[:32]
+        log.info("[DeltaLive] place_stop_order %s", body)
+        return self._signed_request("POST", "/v2/orders", body=body).get("result") or {}
+
+    def edit_stop_order(self, order_id: str, product_id: int, symbol: str, side: str, stop_price: float, limit_price: float = 0.0) -> dict:
+        """PUT /v2/orders — move a resting stop (trailing SL)."""
+        product = self.get_product(symbol)
+        body: dict[str, Any] = {
+            "id": int(order_id), "product_id": int(product_id),
+            "stop_price": self.round_to_tick(stop_price, product.get("tick_size"), side),
+        }
+        if limit_price > 0:
+            body["limit_price"] = self.round_to_tick(limit_price, product.get("tick_size"), side)
+        log.info("[DeltaLive] edit_stop_order %s", body)
+        return self._signed_request("PUT", "/v2/orders", body=body).get("result") or {}
+
+    def open_orders(self) -> list[dict]:
+        """GET /v2/orders — open + untriggered (pending) orders."""
+        return self._signed_request("GET", "/v2/orders", params={"states": "open,pending"}).get("result") or []
+
     def get_order(self, order_id: str) -> dict:
         """GET /v2/orders/{id}."""
         return self._signed_request("GET", f"/v2/orders/{order_id}").get("result") or {}
