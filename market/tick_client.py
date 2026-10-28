@@ -149,6 +149,11 @@ class TickClient:
             if price:
                 update.spot = {**update.spot, underlying: price}
 
+        await self.dispatch(update)
+
+    async def dispatch(self, update: TickUpdate) -> None:
+        """Apply one TickUpdate and run every listener — the WS stream above,
+        and the REST stale-price refresh in algo.trade's main.py."""
         self._cache.apply(update)
 
         for listener in list(self._listeners):
